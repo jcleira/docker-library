@@ -1,4 +1,4 @@
-FROM alpine:3.7 as builder
+FROM alpine as builder
 
 RUN set -xe \
     && apk add --no-cache \
@@ -8,27 +8,24 @@ RUN set -xe \
         cmake \
         git \
         libtool \
-        zlib-dev
+        zlib-dev \
+        linux-headers
 
-ARG GRPC_VERSION
+ENV GRPC_VERSION v1.33.1
 
 RUN if [[ -z "$GRPC_VERSION" ]]; then echo "GRPC_VERSION argument MUST be set" && exit 1; fi
 
-RUN git clone --depth 1 --recursive -b v${GRPC_VERSION} https://github.com/grpc/grpc.git /grpc
+RUN git clone --depth 1 --recursive -b ${GRPC_VERSION} https://github.com/grpc/grpc.git /grpc
 
 ENV LDFLAGS=-static
 
-RUN cd /grpc/third_party/gflags \
-    && mkdir build && cd build \
-    && cmake -DBUILD_SHARED_LIBS=0 -DGFLAGS_INSTALL_SHARED_LIBS=0 .. \
-    && make -j2 \
-    && make install
-
-RUN cd /grpc && make -j2 grpc_cli
-
+RUN mkdir -p /grpc/cmake/build \
+  && cd /grpc/cmake/build \
+  && cmake -DgRPC_BUILD_TESTS=ON ../.. \
+  && make grpc_cli
 
 FROM scratch
-COPY --from=builder /grpc/bins/opt/grpc_cli /grpc_cli
+COPY --from=builder /grpc/cmake/build/grpc_cli /grpc_cli
 COPY --from=builder /grpc/etc/roots.pem /usr/local/share/grpc/roots.pem
 
 ENTRYPOINT ["/grpc_cli"]
